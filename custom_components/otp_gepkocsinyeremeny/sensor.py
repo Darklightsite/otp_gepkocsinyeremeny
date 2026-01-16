@@ -331,7 +331,7 @@ class OtpCoordinator(DataUpdateCoordinator):
         return None
     
     async def _extract_text_from_pdf(self, session, url):
-        """Letölti és kinyeri a szöveget egy PDF-ből."""
+        """Letölti és kinyeri a szöveget egy PDF-ből pypdf segítségével."""
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
@@ -339,13 +339,31 @@ class OtpCoordinator(DataUpdateCoordinator):
                     return None
                 pdf_bytes = await response.read()
             
-            # Egyszerű szöveg kinyerés a PDF bináris adatból
+            # PDF feldolgozása pypdf-fel
             text = ""
             try:
-                content = pdf_bytes.decode('latin-1', errors='ignore')
-                text = content # Visszaadjuk a nyers tartalmat további feldolgozásra
+                # Futtassuk thread pool-ban, mert a pypdf CPU igényes lehet
+                def parse_pdf():
+                    import io
+                    from pypdf import PdfReader
+                    f = io.BytesIO(pdf_bytes)
+                    reader = PdfReader(f)
+                    extracted = ""
+                    for page in reader.pages:
+                        extracted += page.extract_text() + "\n"
+                    return extracted
+
+                text = await self.hass.async_add_executor_job(parse_pdf)
+                
+            except ImportError:
+                _LOGGER.error("A pypdf könyvtár nem található! Kérlek indítsd újra a Home Assistant-ot.")
+                # Fallback: egyszerű decode
+                text = pdf_bytes.decode('latin-1', errors='ignore')
+
             except Exception as e:
-                _LOGGER.debug(f"PDF feldolgozási hiba: {e}")
+                _LOGGER.debug(f"PDF feldolgozási hiba (pypdf): {e}")
+                # Fallback
+                text = pdf_bytes.decode('latin-1', errors='ignore')
             
             return text
         except asyncio.TimeoutError:
