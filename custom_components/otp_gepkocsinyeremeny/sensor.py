@@ -299,13 +299,19 @@ class OtpCoordinator(DataUpdateCoordinator):
     
     def _extract_pdf_urls_from_html(self, html_content):
         """Kinyeri a PDF URL-eket az OTP oldalból."""
-        pattern = r'https://www\.otpbank\.hu/static/portal/sw/file/GK_\d{8}(?:_extra)?\.pdf'
+        # Keressük a GK_*.pdf linkeket relative vagy absolute módon
+        # Pattern: (/static/portal/sw/file/GK_YYYYMMDD.pdf)
+        pattern = r'(?:https://www\.otpbank\.hu)?/static/portal/sw/file/GK_\d{8}(?:_extra)?\.pdf'
         urls = re.findall(pattern, html_content)
         
         # Deduplikálás megtartva a sorrendet
         seen = set()
         unique_urls = []
         for url in urls:
+            # Ha relatív, tegyük elé a domaint
+            if url.startswith("/"):
+                url = f"https://www.otpbank.hu{url}"
+                
             if url not in seen:
                 seen.add(url)
                 unique_urls.append(url)
