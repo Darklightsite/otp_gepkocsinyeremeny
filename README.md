@@ -36,7 +36,17 @@ Home Assistant integráció az OTP gépkocsinyeremény betétek automatikus elle
 
 ## Megjelenítés (Lovelace)
 
-Az integrációhoz tartozik egy előre formázott kártya minta. A `card.minta` fájlban találod a YAML kódot.
+Az integrációhoz több előre elkészített kártya minta is tartozik, amelyeket a `cards/` mappában találsz meg.
+
+### Választható stílusok:
+1. **Advanced (`cards/advanced.yaml`):** Teljes funkcionalitás, manuális frissítés gomb, látványos dizájn. *(Ez az alapértelmezett `card.minta`)*
+2. **Simple (`cards/simple.yaml`):** Egyetlen egyszerű kártya, ami érintésre nyitja meg a részleteket.
+3. **Compact (`cards/compact.yaml`):** Csak "chips" gombok, helytakarékos elrendezés.
+
+**Használat:**
+1. Nyisd meg a kiválasztott `.yaml` fájlt.
+2. Másold ki a teljes tartalmát.
+3. A Home Assistant Dashboard-on adj hozzá egy **Manual** kártyát és illeszd be a kódot.
 
 Szükséges HACS kiegészítők a szép megjelenéshez:
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom)
