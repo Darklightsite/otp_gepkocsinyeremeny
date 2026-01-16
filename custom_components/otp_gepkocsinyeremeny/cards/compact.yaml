@@ -2,11 +2,11 @@ type: custom:mushroom-chips-card
 chips:
   - type: template
     icon: >-
-      {% if states('sensor.otp_nyeremenyek')|int > 0 %}mdi:trophy{% else %}mdi:car{% endif %}
+      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}mdi:trophy{% else %}mdi:car{% endif %}
     icon_color: >-
-      {% if states('sensor.otp_nyeremenyek')|int > 0 %}amber{% else %}grey{% endif %}
+      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}amber{% else %}grey{% endif %}
     content: >-
-      {% if states('sensor.otp_nyeremenyek')|int > 0 %}
+      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}
       {{ states('sensor.otp_nyeremenyek') }} db nyeremény!
       {% else %}
       OTP: 0

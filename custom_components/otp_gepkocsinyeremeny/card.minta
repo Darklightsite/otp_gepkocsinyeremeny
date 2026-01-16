@@ -4,7 +4,7 @@ cards:
   - type: custom:mushroom-template-card
     primary: OTP Gépkocsinyeremény
     secondary: >-
-      {% set count = states('sensor.otp_nyeremenyek')|int %}
+      {% set count = states('sensor.otp_nyeremenyek')|int(0) %}
       {% if count > 0 %}
       🎉 {{ count }} db nyeremény!
       {% else %}
@@ -12,7 +12,7 @@ cards:
       {% endif %}
     icon: mdi:car-convertible
     icon_color: >-
-      {% if states('sensor.otp_nyeremenyek')|int > 0 %}green{% else %}grey{% endif %}
+      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}green{% else %}grey{% endif %}
     fill_container: true
     layout: horizontal
     tap_action:
