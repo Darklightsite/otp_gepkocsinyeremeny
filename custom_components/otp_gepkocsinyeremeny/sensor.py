@@ -4,7 +4,7 @@ import async_timeout
 import re
 import json
 import os
-import io
+import asyncio
 from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
 
@@ -15,8 +15,6 @@ from .const import DOMAIN, CONF_NUMBERS
 _LOGGER = logging.getLogger(__name__)
 # Javított URL - a helyes cím
 URL = "https://www.otpbank.hu/portal/hu/megtakaritas/forint-betetek/gepkocsinyeremeny"
-# PDF URL minta: https://www.otpbank.hu/static/portal/sw/file/GK_YYYYMMDD.pdf
-PDF_URL_TEMPLATE = "https://www.otpbank.hu/static/portal/sw/file/GK_{date}.pdf"
 
 # Magyar fix ünnepnapok (hónap, nap)
 HOLIDAYS = [
@@ -72,29 +70,6 @@ def calculate_next_draw():
         else:
             next_month = date(today.year, today.month + 1, 15)
         return get_next_workday(next_month)
-
-def generate_pdf_dates(months_back=24):
-    """Generálja a lehetséges PDF dátumokat visszamenőleg."""
-    dates = []
-    today = date.today()
-    
-    for i in range(months_back):
-        # Minden hónapban a 15-e körüli munkanap
-        target_month = today - relativedelta(months=i)
-        candidate = date(target_month.year, target_month.month, 15)
-        draw_date = get_next_workday(candidate)
-        
-        # Ha ez a dátum még a jövőben van, kihagyjuk
-        if draw_date > today:
-            continue
-            
-        dates.append(draw_date)
-        
-        # Extra sorsolások (január és július közepén szokott lenni)
-        if target_month.month in [1, 7]:
-            dates.append((draw_date, True))  # extra flag
-    
-    return dates
 
 def parse_numbers(raw_text):
     """Szöveg szétszedése és tartományok kibontása."""
@@ -163,6 +138,45 @@ def check_number_in_content(num, content):
     found, _ = find_number_with_car(num, content)
     return found
 
+def extract_all_winners_from_text(text):
+    """Kinyeri az összes nyertes számot és autót a szövegből.
+    
+    Returns:
+        list: [{"szam": "500012345", "auto": "Toyota..."}]
+    """
+    results = []
+    # Pattern: szám (ami 9 jegyű és 5/6-tal kezdődik) + opcionálisan autó név
+    # Formátum 1: 50 0088599 Toyota Aygo...
+    # Formátum 2: 500088599 Toyota Aygo...
+    
+    # Először szedjük szét sorokra
+    lines = text.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Keresünk számot a sorban
+        # \b(5|6)\d\s?\d{7}\b
+        match = re.search(r'\b([56]\d)\s?(\d{7})\b', line)
+        if match:
+            full_num = f"{match.group(1)}{match.group(2)}" # 500088599
+            
+            # Autó keresése a szám után
+            car_part = line[match.end():].strip()
+            
+            # Tisztítás
+            car_part = re.sub(r'^\s*[-–]\s*', '', car_part) # Kötőjel eltávolítása az elejéről
+            car_part = re.sub(r'\s+', ' ', car_part)
+            
+            entry = {"szam": full_num}
+            if car_part and len(car_part) > 3: # Ha maradt valami értelmes szöveg
+                entry["auto"] = car_part
+            
+            results.append(entry)
+            
+    return results
+
 async def async_setup_entry(hass, entry, async_add_entities):
     raw_input = entry.data.get(CONF_NUMBERS, "")
     my_numbers = parse_numbers(raw_input)
@@ -181,47 +195,82 @@ class OtpCoordinator(DataUpdateCoordinator):
         )
         self.my_numbers = my_numbers
         self.hass = hass
-        # Nyeremény történelem fájl
-        self._history_file = hass.config.path("otp_nyeremeny_history.json")
-        self._state_file = hass.config.path("otp_gepkocsi_state.json")
-        self._history = self._load_history()
-        self._state = self._load_state()
+        # Fájl elérési utak
+        self._history_file = hass.config.path("otp_nyeremeny_history.json") # Felhasználó saját találatai
+        self._state_file = hass.config.path("otp_gepkocsi_state.json")       # Szkennelési állapot
+        self._all_winners_file = hass.config.path("otp_all_winners.json")    # Összes valaha volt nyertes (globális cache)
+        
+        self._history = []
+        self._state = {"history_scan_done": False, "checked_pdfs": []}
+        self._all_winners = {} # {"YYYYMMDD": {"text": "...", "numbers": [...]}}
     
-    def _load_history(self):
-        """Betölti a nyeremény történelmet fájlból."""
-        try:
-            if os.path.exists(self._history_file):
-                with open(self._history_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            _LOGGER.warning(f"Nem sikerült betölteni a történelmet: {e}")
-        return []
+    async def _async_load_files(self):
+        """Betölti a fájlokat async módon."""
+        def load_sync():
+            history = []
+            state = {"history_scan_done": False, "checked_pdfs": []}
+            all_winners = {}
+            
+            # 1. Saját történelem
+            try:
+                if os.path.exists(self._history_file):
+                    with open(self._history_file, 'r', encoding='utf-8') as f:
+                        history = json.load(f)
+            except Exception as e:
+                _LOGGER.warning(f"Nem sikerült betölteni a történelmet: {e}")
+            
+            # 2. Állapot
+            try:
+                if os.path.exists(self._state_file):
+                    with open(self._state_file, 'r', encoding='utf-8') as f:
+                        state = json.load(f)
+            except Exception as e:
+                _LOGGER.warning(f"Nem sikerült betölteni az állapotot: {e}")
+
+            # 3. Globális nyereménylista
+            try:
+                if os.path.exists(self._all_winners_file):
+                    with open(self._all_winners_file, 'r', encoding='utf-8') as f:
+                        all_winners = json.load(f)
+            except Exception as e:
+                _LOGGER.warning(f"Nem sikerült betölteni a globális nyereménylistát: {e}")
+            
+            return history, state, all_winners
+        
+        self._history, self._state, self._all_winners = await self.hass.async_add_executor_job(load_sync)
     
-    def _load_state(self):
-        """Betölti az integráció állapotát."""
-        try:
-            if os.path.exists(self._state_file):
-                with open(self._state_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            _LOGGER.warning(f"Nem sikerült betölteni az állapotot: {e}")
-        return {"history_scan_done": False, "checked_pdfs": []}
+    async def _async_save_state(self):
+        """Elmenti az integráció állapotát async módon."""
+        def save_sync():
+            try:
+                with open(self._state_file, 'w', encoding='utf-8') as f:
+                    json.dump(self._state, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                _LOGGER.error(f"Nem sikerült menteni az állapotot: {e}")
+        
+        await self.hass.async_add_executor_job(save_sync)
     
-    def _save_state(self):
-        """Elmenti az integráció állapotát."""
-        try:
-            with open(self._state_file, 'w', encoding='utf-8') as f:
-                json.dump(self._state, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            _LOGGER.error(f"Nem sikerült menteni az állapotot: {e}")
-    
-    def _save_history(self):
-        """Elmenti a nyeremény történelmet fájlba."""
-        try:
-            with open(self._history_file, 'w', encoding='utf-8') as f:
-                json.dump(self._history, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            _LOGGER.error(f"Nem sikerült menteni a történelmet: {e}")
+    async def _async_save_history(self):
+        """Elmenti a nyeremény történelmet fájlba async módon."""
+        def save_sync():
+            try:
+                with open(self._history_file, 'w', encoding='utf-8') as f:
+                    json.dump(self._history, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                _LOGGER.error(f"Nem sikerült menteni a történelmet: {e}")
+        
+        await self.hass.async_add_executor_job(save_sync)
+
+    async def _async_save_all_winners(self):
+        """Elmenti a globális nyereménylistát fájlba async módon."""
+        def save_sync():
+            try:
+                with open(self._all_winners_file, 'w', encoding='utf-8') as f:
+                    json.dump(self._all_winners, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                _LOGGER.error(f"Nem sikerült menteni a globális nyereménylistát: {e}")
+        
+        await self.hass.async_add_executor_job(save_sync)
     
     def _add_to_history(self, num, draw_info, car_type=None, source="current"):
         """Hozzáad egy nyereményt a történelemhez ha még nincs benne."""
@@ -248,107 +297,179 @@ class OtpCoordinator(DataUpdateCoordinator):
         _LOGGER.info(f"Új nyeremény rögzítve: {num} ({draw_info}){car_info}")
         return True
     
+    def _extract_pdf_urls_from_html(self, html_content):
+        """Kinyeri a PDF URL-eket az OTP oldalból."""
+        pattern = r'https://www\.otpbank\.hu/static/portal/sw/file/GK_\d{8}(?:_extra)?\.pdf'
+        urls = re.findall(pattern, html_content)
+        
+        # Deduplikálás megtartva a sorrendet
+        seen = set()
+        unique_urls = []
+        for url in urls:
+            if url not in seen:
+                seen.add(url)
+                unique_urls.append(url)
+        
+        _LOGGER.debug(f"Talált PDF URL-ek: {len(unique_urls)} db")
+        return unique_urls
+    
+    def _parse_date_from_pdf_url(self, url):
+        """Kiolvassa a dátumot egy PDF URL-ből."""
+        match = re.search(r'GK_(\d{4})(\d{2})(\d{2})(_extra)?\.pdf', url)
+        if match:
+            year = int(match.group(1))
+            month = int(match.group(2))
+            day = int(match.group(3))
+            is_extra = match.group(4) is not None
+            return year, month, day, is_extra
+        return None
+    
     async def _extract_text_from_pdf(self, session, url):
         """Letölti és kinyeri a szöveget egy PDF-ből."""
         try:
-            async with session.get(url) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
+                    _LOGGER.debug(f"PDF nem elérhető ({response.status}): {url}")
                     return None
                 pdf_bytes = await response.read()
             
             # Egyszerű szöveg kinyerés a PDF bináris adatból
-            # A PDF-ekben a számok általában olvasható formában vannak
             text = ""
             try:
-                # Próbáljuk meg UTF-8-ként dekódolni a releváns részeket
                 content = pdf_bytes.decode('latin-1', errors='ignore')
-                # Keressük a számokat a PDF-ben
-                # A nyertes számok formátuma: "50 0088599" vagy "500088599"
-                numbers = re.findall(r'\b\d{2}\s?\d{7}\b', content)
-                text = " ".join(numbers)
+                text = content # Visszaadjuk a nyers tartalmat további feldolgozásra
             except Exception as e:
                 _LOGGER.debug(f"PDF feldolgozási hiba: {e}")
             
             return text
+        except asyncio.TimeoutError:
+            _LOGGER.debug(f"PDF letöltési timeout: {url}")
+            return None
         except Exception as e:
             _LOGGER.debug(f"PDF letöltési hiba ({url}): {e}")
             return None
     
-    async def _scan_historical_pdfs(self, session):
-        """Átvizsgálja az elmúlt 2 év PDF-jeit nyereményekért."""
-        if self._state.get("history_scan_done"):
-            return
-        
-        _LOGGER.info("Történelmi sorsolások vizsgálata elkezdődött (2 év)...")
+    async def _scan_historical_pdfs(self, session, html_content):
+        """Átvizsgálja a történelmi PDF-eket az oldalról kinyert linkek alapján."""
+        _LOGGER.info("Történelmi sorsolások vizsgálata elkezdődött...")
         found_any = False
+        updates_made = False
         
-        today = date.today()
         checked_pdfs = set(self._state.get("checked_pdfs", []))
         
-        # 24 hónap visszamenőleg
-        for months_ago in range(24):
-            target_date = today - relativedelta(months=months_ago)
+        # PDF URL-ek kinyerése az oldalból
+        pdf_urls = self._extract_pdf_urls_from_html(html_content)
+        
+        if not pdf_urls:
+            _LOGGER.warning("Nem találtam PDF linkeket az oldalon!")
+            return
+        
+        _LOGGER.info(f"Összesen {len(pdf_urls)} PDF link található az oldalon")
+        
+        pdf_count = 0
+        for url in pdf_urls:
+            # Dátum kinyerése az URL-ből key-nek
+            date_info = self._parse_date_from_pdf_url(url)
+            if not date_info:
+                continue
             
-            # Próbáljuk a hónap közepét (15.) és néhány nappal utána
-            for day_offset in [15, 16, 17, 18, 19]:
-                try:
-                    check_date = date(target_date.year, target_date.month, day_offset)
-                except ValueError:
-                    continue
+            year, month, day, is_extra = date_info
+            date_key = f"{year}{month:02d}{day:02d}{'_extra' if is_extra else ''}"
+
+            # Ha már megvan a globális cache-ben, nem töltjük le újra, de ellenőrizzük a számainkat
+            if date_key in self._all_winners:
+                draw_data = self._all_winners[date_key]
+                draw_info = draw_data["text"]
+                for winner in draw_data["numbers"]:
+                    if winner["szam"] in self.my_numbers:
+                        if self._add_to_history(winner["szam"], draw_info, winner.get("auto"), source="history_cache"):
+                            found_any = True
+                continue
+
+            # Ha még nincs meg, letöltjük
+            if url in checked_pdfs and not self._state.get("force_rescan"):
+                 # Ha már checkoltuk és nincs force rescan, de nincs a cache-ben (furcsa), akkor letöltjük
+                 pass
+            
+            # PDF letöltése és ellenőrzése
+            text = await self._extract_text_from_pdf(session, url)
+            
+            if text:
+                pdf_count += 1
+                extra_suffix = " (extra)" if is_extra else ""
+                draw_info = f"{year}. {MONTH_NAMES[month]} {day}.{extra_suffix}"
                 
-                if check_date > today:
-                    continue
+                # Összes nyertes kinyerése
+                all_raw_winners = extract_all_winners_from_text(text)
                 
-                date_str = check_date.strftime("%Y%m%d")
+                # Mentés a globális cache-be
+                self._all_winners[date_key] = {
+                    "text": draw_info,
+                    "url": url,
+                    "scan_date": datetime.now().isoformat(),
+                    "numbers": all_raw_winners
+                }
+                updates_made = True
                 
-                if date_str in checked_pdfs:
-                    continue
+                # Ellenőrizzük a saját számainkat
+                for winner in all_raw_winners:
+                    if winner["szam"] in self.my_numbers:
+                        if self._add_to_history(winner["szam"], draw_info, winner.get("auto"), source="history_scan"):
+                            found_any = True
+                            _LOGGER.info(f"🎉 Nyertes szám találva: {winner['szam']} ({draw_info})")
                 
-                # Normál sorsolás
-                pdf_url = PDF_URL_TEMPLATE.format(date=date_str)
-                text = await self._extract_text_from_pdf(session, pdf_url)
-                
-                if text:
-                    draw_info = f"{check_date.year}. {MONTH_NAMES[check_date.month]} {check_date.day}."
-                    for num in self.my_numbers:
-                        if check_number_in_content(num, text):
-                            if self._add_to_history(num, draw_info, source="history_scan"):
-                                found_any = True
-                    checked_pdfs.add(date_str)
-                    break  # Ha megtaláltuk a hónap PDF-jét, továbblépünk
-                
-                # Extra sorsolás (január, július)
-                if target_date.month in [1, 7]:
-                    extra_url = PDF_URL_TEMPLATE.format(date=f"{date_str}_extra")
-                    extra_text = await self._extract_text_from_pdf(session, extra_url)
-                    if extra_text:
-                        draw_info = f"{check_date.year}. {MONTH_NAMES[check_date.month]} {check_date.day}. (extra)"
-                        for num in self.my_numbers:
-                            if check_number_in_content(num, extra_text):
-                                if self._add_to_history(num, draw_info, source="history_scan"):
-                                    found_any = True
+                checked_pdfs.add(url)
+            
+            # Kis szünet a kérések között
+            await asyncio.sleep(0.5)
         
         # Mentés
         self._state["history_scan_done"] = True
         self._state["checked_pdfs"] = list(checked_pdfs)
-        self._save_state()
+        if "force_rescan" in self._state:
+            del self._state["force_rescan"]
+            
+        await self._async_save_state()
         
+        if updates_made:
+             await self._async_save_all_winners()
+
         if found_any:
             self._history.sort(key=lambda x: x.get("rogzitve", ""), reverse=True)
-            self._save_history()
+            await self._async_save_history()
         
-        _LOGGER.info(f"Történelmi vizsgálat befejezve. Összesen {len(self._history)} nyeremény találva.")
+        _LOGGER.info(f"Történelmi vizsgálat befejezve. {pdf_count} új PDF feldolgozva.")
+
+    def _check_numbers_against_cache(self):
+        """Ellenőrzi a felhasználó számait a globális cache-ben."""
+        found_any = False
+        for date_key, data in self._all_winners.items():
+            draw_info = data["text"]
+            for winner in data["numbers"]:
+                if winner["szam"] in self.my_numbers:
+                    if self._add_to_history(winner["szam"], draw_info, winner.get("auto"), source="cache_check"):
+                        found_any = True
+        return found_any
 
     async def _async_update_data(self):
+        # Első futáskor betöltjük a fájlokat
+        if not self._history and not self._all_winners:
+            await self._async_load_files()
+        
+        # Mindig ellenőrizzük a cache-t, hátha új számot adott hozzá a user
+        if self._check_numbers_against_cache():
+             self._history.sort(key=lambda x: x.get("rogzitve", ""), reverse=True)
+             await self._async_save_history()
+
         try:
-            async with async_timeout.timeout(120):  # Hosszabb timeout a PDF-ek miatt
+            async with async_timeout.timeout(180):  # 3 perc timeout a PDF-ek miatt
                 async with aiohttp.ClientSession() as session:
-                    # Először a történelmi vizsgálat (csak egyszer fut le)
-                    await self._scan_historical_pdfs(session)
-                    
-                    # Aktuális oldal ellenőrzése
+                    # Aktuális oldal letöltése
                     async with session.get(URL) as response:
                         raw_content = await response.text()
+                    
+                    # Történelmi vizsgálat (kiegészíti a hiányzókat)
+                    await self._scan_historical_pdfs(session, raw_content)
             
             # 1. Utolsó sorsolás - keressük a "XXX. sorsolás" mintát
             match_sorsolas = re.search(r'(\d+)\.\s*sorsolás', raw_content)
@@ -391,7 +512,7 @@ class OtpCoordinator(DataUpdateCoordinator):
                         source="current"
                     )
                 self._history.sort(key=lambda x: x.get("rogzitve", ""), reverse=True)
-                self._save_history()
+                await self._async_save_history()
             
             # Egyszerű lista a számokról (visszafelé kompatibilitás)
             found_numbers = [w["szam"] for w in found_winners]

@@ -1,0 +1,118 @@
+type: vertical-stack
+cards:
+  - type: custom:mushroom-template-card
+    primary: OTP Gépkocsinyeremény
+    secondary: >-
+      {% set count = states('sensor.otp_nyeremenyek')|int %}
+      {% if count > 0 %}
+      🎉 {{ count }} db nyeremény!
+      {% else %}
+      Nincs nyeremény a figyelt betétek között
+      {% endif %}
+    icon: mdi:car-convertible
+    icon_color: >-
+      {% if states('sensor.otp_nyeremenyek')|int > 0 %}green{% else %}grey{% endif %}
+    fill_container: true
+    layout: horizontal
+    tap_action:
+      action: more-info
+    card_mod:
+      style: |
+        ha-card {
+          padding-bottom: 1px !important;
+          border: none;
+          background: rgba(var(--rgb-primary-background-color), 0.5);
+        }
+
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: template
+        icon: mdi:ticket-outline
+        content: "{{ state_attr('sensor.otp_nyeremenyek', 'figyelt_db') }} db"
+        card_mod:
+          style: |
+            ha-card {
+              border: none;
+              background: rgba(var(--rgb-primary-text-color), 0.05);
+            }
+      - type: template
+        icon: mdi:calendar-refresh
+        content: "{{ state_attr('sensor.otp_nyeremenyek', 'utolso_sorsolas').split('(')[0] | trim }}"
+        card_mod:
+          style: |
+            ha-card {
+              border: none;
+              background: rgba(var(--rgb-primary-text-color), 0.05);
+            }
+      - type: template
+        icon: mdi:clock-outline
+        content: "{{ state_attr('sensor.otp_nyeremenyek', 'kovetkezo_sorsolas').split('(')[0] | trim }}"
+        card_mod:
+          style: |
+            ha-card {
+              border: none;
+              background: rgba(var(--rgb-primary-text-color), 0.05);
+            }
+    alignment: center
+    card_mod:
+      style: |
+        ha-card {
+          padding-top: 5px;
+          padding-bottom: 10px;
+          border: none;
+          background: transparent;
+        }
+
+  - type: conditional
+    conditions:
+      - entity: sensor.otp_nyeremenyek
+        state_not: "0"
+    card:
+      type: custom:mushroom-template-card
+      primary: "🏆 Nyertes Betétek"
+      secondary: >-
+        {% for item in state_attr('sensor.otp_nyeremenyek', 'nyertes_reszletek') %}
+        {{ item.szam }}{% if item.auto %} - {{ item.auto }}{% endif %}
+        
+        {% endfor %}
+      icon: mdi:trophy
+      icon_color: amber
+      layout: vertical
+      multiline_secondary: true
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(255, 193, 7, 0.15);
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            margin: 0 12px 12px 12px;
+            border-radius: 12px;
+          }
+
+  - type: conditional
+    conditions:
+      - entity: sensor.otp_nyeremenyek
+        attribute: nyeremeny_tortenelem
+        state_not: "[]"
+    card:
+      type: custom:mushroom-template-card
+      primary: "Korábbi nyeremények"
+      secondary: >-
+         {% set history = state_attr('sensor.otp_nyeremenyek', 'nyeremeny_tortenelem') %}
+         {% for item in history[:5] %}
+         {{ item.datum }}: {{ item.szam }}
+         {% endfor %}
+         {% if history|length > 5 %}...és még {{ history|length - 5 }} db{% endif %}
+      icon: mdi:history
+      icon_color: purple
+      layout: vertical
+      multiline_secondary: true
+      tap_action:
+        action: more-info
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(var(--rgb-primary-text-color), 0.03);
+            border: none;
+            margin: 0 12px 12px 12px;
+            border-radius: 12px;
+          }
