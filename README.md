@@ -1,15 +1,18 @@
 # OTP Gépkocsinyeremény Ellenőrző
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Darklightsite&repository=otp_gepkocsinyeremeny&category=Integration)
+
 Home Assistant integráció az OTP gépkocsinyeremény betétek automatikus ellenőrzéséhez.
 
-![Képernyőkép](https://github.com/Darklightsite/otp_gepkocsinyeremeny/blob/main/screenshot.png?raw=true)
+![Képernyőkép](images/cards_v1.2.png)
 
 ## Funkciók
 
 - 🚗 **Automatikus ellenőrzés:** Naponta kétszer ellenőrzi az OTP hivatalos oldalát.
 - 📜 **Előzmények:** Visszamenőleg 2 évre tárolja és ellenőrzi a nyereményeket.
+- 📊 **Állapotkövetés:** Láblécben jelzi az utolsó frissítés idejét.
 - 🚦 **Értesítések:** Azonnal látod a Dashboard-on, ha nyertél.
-- 🎨 **Szép kártya:** Prémium "Mushroom" stílusú kártya design.
+- 🎨 **Szép kártyák:** 3 különböző stílusú kártya (Comfort, Premium, Advanced).
 
 ## Telepítés
 
@@ -32,16 +35,27 @@ Home Assistant integráció az OTP gépkocsinyeremény betétek automatikus elle
 
 1. Menj a **Beállítások** -> **Eszközök és szolgáltatások** -> **Integráció hozzáadása** menübe.
 2. Keresd meg: **OTP Gépkocsinyeremény**.
-3. Írd be a figyelt betétkönyv számokat (vesszővel elválasztva vagy szóközzel, pl. `50 1234567, 60 9876543`).
+3. Írd be a figyelt betétkönyv számokat.
+   - **Tipp:** Megadhatsz tartományokat is (pl. `12345678-12345688`) vagy formázott számokat (pl. `14-1234567`).
 
 ## Megjelenítés (Lovelace)
 
-Az integrációhoz több előre elkészített kártya minta is tartozik, amelyeket a `cards/` mappában találsz meg.
+Az integrációhoz 3 különböző stílusú, előre elkészített kártya tartozik a `cards/` mappában:
 
-### Választható stílusok:
-1. **Advanced (`cards/advanced.yaml`):** Teljes funkcionalitás, manuális frissítés gomb, látványos dizájn. *(Ez az alapértelmezett `card.minta`)*
-2. **Simple (`cards/simple.yaml`):** Egyetlen egyszerű kártya, ami érintésre nyitja meg a részleteket.
-3. **Compact (`cards/compact.yaml`):** Csak "chips" gombok, helytakarékos elrendezés.
+1. **Advanced (`cards/advanced.yaml`):** (Bal oldali)
+   - Klasszikus, sötét tónusú kártya
+   - Részletes lista nézet
+   - Frissítés gomb és állapotjelző
+
+2. **Premium (`cards/compact.yaml`):** (Középső)
+   - Extra látványos **Arany/Fekete** dizájn
+   - **Animált** nyeremény jelzés (parti tülök + lüktető keret)
+   - Arany gradiens fejléc
+
+3. **Comfort (`cards/simple.yaml`):** (Jobb oldali)
+   - Letisztult, "nyugodt" dizájn
+   - Egységes zöld/szürke színvilág
+   - Kompakt megjelenés
 
 **Használat:**
 1. Nyisd meg a kiválasztott `.yaml` fájlt.
@@ -51,3 +65,4 @@ Az integrációhoz több előre elkészített kártya minta is tartozik, amelyek
 Szükséges HACS kiegészítők a szép megjelenéshez:
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom)
 - [card-mod](https://github.com/thomasloven/lovelace-card-mod)
+- [stack-in-card](https://github.com/custom-cards/stack-in-card) (Új!)
