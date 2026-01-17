@@ -39,6 +39,30 @@ class OTPCoordinator(DataUpdateCoordinator):
                 part = part.strip()
                 if not part:
                     continue
+                
+                # Check for range (e.g. "600123450-600123460")
+                if "-" in part:
+                    range_parts = part.split("-")
+                    if len(range_parts) == 2:
+                        # Clean both parts to see if they are valid numbers
+                        start_str = re.sub(r"[^0-9]", "", range_parts[0])
+                        end_str = re.sub(r"[^0-9]", "", range_parts[1])
+                        
+                        # Only treat as range if both look like full numbers (>=8 digits)
+                        # and are similar length, to avoid splitting "14-8008533" which is one number
+                        if (len(start_str) >= 8 and len(end_str) >= 8 and 
+                            len(start_str) == len(end_str)):
+                            try:
+                                start_num = int(start_str)
+                                end_num = int(end_str)
+                                if end_num > start_num and (end_num - start_num) < 1000: # Max 1000 range limit
+                                    for i in range(start_num, end_num + 1):
+                                        self.my_numbers.append(str(i))
+                                    continue # Range processed
+                            except ValueError:
+                                pass # Fallback to single number cleaning
+
+                # Normal processing (single number)
                 # Összerakjuk a szóközöket (pl. "14 8008533" -> "148008533")
                 clean_num = re.sub(r"\s+", "", part)
                 # Csak számjegyeket tartunk meg
