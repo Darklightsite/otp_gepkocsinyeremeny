@@ -1,22 +1,49 @@
+# 🚗 OTP Gépkocsinyeremény - Kompakt Chip Kártya
+# ⚠️ Cseréld le az entitás neveket ha más nevet adtál az integrációnak!
+
 type: custom:mushroom-chips-card
 chips:
+  # Fő státusz chip
   - type: template
     icon: >-
-      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}mdi:trophy{% else %}mdi:car{% endif %}
-    icon_color: >-
-      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}amber{% else %}grey{% endif %}
-    content: >-
-      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}
-      {{ states('sensor.otp_nyeremenyek') }} db nyeremény!
+      {% if states('sensor.otp_betetek')|int(0) > 0 %}
+        mdi:trophy
       {% else %}
-      OTP: 0
+        mdi:car-convertible
+      {% endif %}
+    icon_color: >-
+      {% if states('sensor.otp_betetek')|int(0) > 0 %}amber{% else %}blue{% endif %}
+    content: >-
+      {% set count = states('sensor.otp_betetek')|int(0) %}
+      {% if count > 0 %}
+        🎉 {{ count }} nyeremény!
+      {% else %}
+        OTP ({{ state_attr('sensor.otp_betetek', 'figyelt_db')|default(0) }})
       {% endif %}
     tap_action:
       action: more-info
+      entity: sensor.otp_betetek
+    card_mod:
+      style: |
+        ha-card {
+          --chip-background: {% if states('sensor.otp_betetek')|int(0) > 0 %}
+            rgba(255, 193, 7, 0.2){% else %}rgba(66, 165, 245, 0.15){% endif %};
+          --chip-border-radius: 20px;
+        }
   
+  # Frissítés chip
   - type: entity
     entity: button.otp_betetek_adatbazis_frissitese
     icon: mdi:refresh
+    icon_color: cyan
     tap_action:
       action: toggle
     content_info: none
+
+alignment: center
+card_mod:
+  style: |
+    ha-card {
+      background: transparent;
+      border: none;
+    }

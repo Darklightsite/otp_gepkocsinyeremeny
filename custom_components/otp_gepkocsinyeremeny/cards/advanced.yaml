@@ -1,52 +1,81 @@
+# 🚗 OTP Gépkocsinyeremény - Premium Kártya
+# 
+# ⚠️ HASZNÁLAT: A kártya bemásolása után az entitás neveket cseréld le!
+# Menj a Fejlesztői Eszközök > Állapotok menübe hogy meglásd a pontos entitás neveket.
+# Példák: sensor.csaladi_betetek, sensor.nagymama_betetei stb.
+
 type: vertical-stack
 cards:
-  # --- FEJLÉC ÉS STÁTUSZ ---
+  # --- FEJLÉC ---
   - type: custom:mushroom-template-card
-    primary: OTP Gépkocsinyeremény
+    primary: "🚗 OTP Gépkocsinyeremény"
     secondary: >-
-      {% set count = states('sensor.otp_nyeremenyek')|int(0) %}
+      {% set count = states('sensor.otp_betetek')|int(0) %}
       {% if count > 0 %}
-      🎉 {{ count }} db nyeremény!
+        🎉 {{ count }} db nyeremény!
       {% else %}
-      Nincs nyeremény a figyelt betétek között
+        {{ state_attr('sensor.otp_betetek', 'figyelt_db')|default(0) }} betét figyelve
       {% endif %}
-    icon: mdi:car-convertible
+    icon: >-
+      {% if states('sensor.otp_betetek')|int(0) > 0 %}
+        mdi:trophy
+      {% else %}
+        mdi:car-convertible
+      {% endif %}
     icon_color: >-
-      {% if states('sensor.otp_nyeremenyek')|int(0) > 0 %}green{% else %}grey{% endif %}
+      {% if states('sensor.otp_betetek')|int(0) > 0 %}amber{% else %}blue{% endif %}
     fill_container: true
     layout: horizontal
     tap_action:
       action: more-info
+      entity: sensor.otp_betetek
     card_mod:
       style: |
         ha-card {
-          padding-bottom: 2px !important;
-          border: none;
-          background: rgba(var(--rgb-primary-background-color), 0.5);
+          background: linear-gradient(135deg, 
+            rgba(30, 35, 45, 0.95) 0%, 
+            rgba(45, 55, 70, 0.9) 100%);
+          border: 1px solid rgba(255, 193, 7, 0.3);
+          border-radius: 16px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        mushroom-shape-icon {
+          --shape-color: {% if states('sensor.otp_betetek')|int(0) > 0 %}
+            rgba(255, 193, 7, 0.2){% else %}rgba(66, 165, 245, 0.2){% endif %} !important;
         }
 
-  # --- CHIPS (INFO + REFRESH) ---
+  # --- INFO CHIPEK ---
   - type: custom:mushroom-chips-card
     chips:
+      # Betétek száma
       - type: template
         icon: mdi:ticket-outline
-        content: "{{ state_attr('sensor.otp_nyeremenyek', 'figyelt_db') }} db"
+        icon_color: cyan
+        content: "{{ state_attr('sensor.otp_betetek', 'figyelt_db')|default(0) }} db"
         tap_action:
-          action: none
+          action: more-info
+          entity: sensor.otp_betetek
       
+      # Utolsó sorsolás
       - type: template
-        icon: mdi:calendar-refresh
-        content: "{{ state_attr('sensor.otp_nyeremenyek', 'utolso_sorsolas').split('(')[0] | trim }}"
+        icon: mdi:calendar-check
+        icon_color: green
+        content: >-
+          {{ state_attr('sensor.otp_betetek', 'utolso_sorsolas')|default('?') }}
         tap_action:
           action: none
 
+      # Következő sorsolás
       - type: template
-        icon: mdi:clock-outline
-        content: "{{ state_attr('sensor.otp_nyeremenyek', 'kovetkezo_sorsolas').split('(')[0] | trim }}"
+        icon: mdi:calendar-clock
+        icon_color: orange
+        content: >-
+          {{ state_attr('sensor.otp_betetek', 'kovetkezo_sorsolas')|default('?') }}
         tap_action:
           action: none
 
-      # Frissítés Gomb Chip
+      # Frissítés gomb
       - type: entity
         entity: button.otp_betetek_adatbazis_frissitese
         icon_color: blue
@@ -58,64 +87,70 @@ cards:
     card_mod:
       style: |
         ha-card {
-           padding-top: 5px;
-           padding-bottom: 10px;
-           border: none;
-           background: transparent;
+          background: transparent;
+          border: none;
+          margin-top: -8px;
         }
 
   # --- NYEREMÉNYEK (CSAK HA VAN) ---
   - type: conditional
     conditions:
-      - entity: sensor.otp_nyeremenyek
+      - entity: sensor.otp_betetek
         state_not: "0"
     card:
       type: custom:mushroom-template-card
       primary: "🏆 Nyertes Betétek!"
       secondary: >-
-        {% for item in state_attr('sensor.otp_nyeremenyek', 'nyertes_reszletek') %}
-        {{ item.szam }}{% if item.auto %} - {{ item.auto }}{% endif %}
-        
+        {% for item in state_attr('sensor.otp_betetek', 'nyertes_reszletek')|default([]) %}
+        🎫 {{ item.szam }}{% if item.auto %} → {{ item.auto }}{% endif %}
         {% endfor %}
-      icon: mdi:trophy
+      icon: mdi:party-popper
       icon_color: amber
       layout: vertical
       multiline_secondary: true
       card_mod:
         style: |
           ha-card {
-            background: rgba(255, 193, 7, 0.15);
+            background: linear-gradient(135deg, 
+              rgba(255, 193, 7, 0.15) 0%, 
+              rgba(255, 152, 0, 0.1) 100%);
             border: 1px solid rgba(255, 193, 7, 0.4);
-            margin: 0 12px 12px 12px;
             border-radius: 12px;
+            margin: 8px 0;
+            animation: pulse 2s infinite;
+          }
+          @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 5px rgba(255, 193, 7, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(255, 193, 7, 0.6); }
           }
 
   # --- ELŐZMÉNYEK ---
   - type: conditional
     conditions:
-      - entity: sensor.otp_nyeremenyek
+      - entity: sensor.otp_betetek
         attribute: nyeremeny_tortenelem
         state_not: "[]"
     card:
       type: custom:mushroom-template-card
-      primary: "Korábbi nyeremények"
+      primary: "📜 Korábbi nyeremények"
       secondary: >-
-         {% set history = state_attr('sensor.otp_nyeremenyek', 'nyeremeny_tortenelem') %}
-         {% for item in history[:5] %}
-         {{ item.datum }}: {{ item.szam }}
-         {% endfor %}
-         {% if history|length > 5 %}...és még {{ history|length - 5 }} db{% endif %}
+        {% set history = state_attr('sensor.otp_betetek', 'nyeremeny_tortenelem')|default([]) %}
+        {% for item in history[:3] %}
+        {{ item.datum }}: {{ item.szam }}
+        {% endfor %}
+        {% if history|length > 3 %}...és még {{ history|length - 3 }} db{% endif %}
       icon: mdi:history
       icon_color: purple
       layout: vertical
       multiline_secondary: true
       tap_action:
         action: more-info
+        entity: sensor.otp_betetek
       card_mod:
         style: |
           ha-card {
-            background: rgba(var(--rgb-primary-text-color), 0.03);
-            border: none;
-            margin: 0 12px 12px 12px;
+            background: rgba(156, 39, 176, 0.1);
+            border: 1px solid rgba(156, 39, 176, 0.3);
             border-radius: 12px;
+            margin-top: 8px;
           }

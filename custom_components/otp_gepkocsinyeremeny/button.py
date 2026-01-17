@@ -1,29 +1,32 @@
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Gomb beállítása."""
-    from .const import DOMAIN
-    if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
-        coordinator = hass.data[DOMAIN][entry.entry_id]
-        async_add_entities([OTPRefreshButton(coordinator)])
-
+"""Frissítés gomb az OTP integrációhoz."""
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.entity import DeviceInfo
-from .const import DOMAIN
+from .const import DOMAIN, CONF_NAME, DEFAULT_NAME
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Gomb beállítása."""
+    if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        async_add_entities([OTPRefreshButton(coordinator, entry)])
 
 class OTPRefreshButton(ButtonEntity):
     """Gomb a manuális frissítéshez."""
     _attr_has_entity_name = True
     _attr_icon = "mdi:refresh"
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator, entry):
         self.coordinator = coordinator
-        self._attr_unique_id = "otp_refresh_button"
+        self._entry = entry
+        self._entry_name = entry.data.get(CONF_NAME, entry.title) or DEFAULT_NAME
+        self._attr_unique_id = f"otp_refresh_{entry.entry_id}"
         self._attr_name = "Adatbázis Frissítése"
 
     @property
     def device_info(self):
         return DeviceInfo(
-            identifiers={(DOMAIN, "otp_main")},
-            name="OTP Betétek",
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name=self._entry_name,
+            manufacturer="OTP Bank",
         )
 
     async def async_press(self) -> None:
