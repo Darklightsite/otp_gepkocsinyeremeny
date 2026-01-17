@@ -76,8 +76,13 @@ class OTPCoordinator(DataUpdateCoordinator):
                                 for i in range(start_num, end_num + 1):
                                     self.my_numbers.append(str(i))
                                 continue # Range processed
+                            else:
+                                _LOGGER.warning(f"Érvénytelen tartomány (túl nagy vagy fordított): {part} (Diff: {end_num - start_num})")
                         except ValueError:
-                            pass 
+                            _LOGGER.warning(f"Nem szám formátumú tartomány: {part}")
+                    else:
+                        if "-" in part and len(start_str) > 5 and len(end_str) > 5:
+                            _LOGGER.warning(f"Tartomány eldobva (hossz eltérés vagy túl rövid): {part} ({len(start_str)} vs {len(end_str)} számjegy)") 
 
                 # Normal processing (single number or failed range)
                 # Összerakjuk a szóközöket (pl. "14 8008533" -> "148008533")

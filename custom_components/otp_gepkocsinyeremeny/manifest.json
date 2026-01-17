@@ -1,7 +1,7 @@
 {
   "domain": "otp_gepkocsinyeremeny",
   "name": "OTP Gépkocsinyeremény Ellenőrző",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "documentation": "https://github.com/Darklightsite/otp_gepkocsinyeremeny",
   "issue_tracker": "https://github.com/Darklightsite/otp_gepkocsinyeremeny/issues",
   "dependencies": [],
