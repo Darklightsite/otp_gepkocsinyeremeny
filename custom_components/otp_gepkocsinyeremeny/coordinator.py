@@ -30,13 +30,20 @@ class OTPCoordinator(DataUpdateCoordinator):
         )
         self.hass = hass
         
-        # Betétszámok tisztítása
+        # Betétszámok tisztítása (formátumok: "14 8008533", "148008533", "60 0588196")
         self.my_numbers = []
         if numbers_str:
-            raw_nums = numbers_str.replace(",", " ").split()
-            for num in raw_nums:
-                clean_num = re.sub(r"[^0-9]", "", num)
-                if len(clean_num) > 0:
+            # Először vesszővel elválasztjuk
+            parts = numbers_str.split(",")
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                # Összerakjuk a szóközöket (pl. "14 8008533" -> "148008533")
+                clean_num = re.sub(r"\s+", "", part)
+                # Csak számjegyeket tartunk meg
+                clean_num = re.sub(r"[^0-9]", "", clean_num)
+                if len(clean_num) >= 8:  # Minimum 8 számjegy kell
                     self.my_numbers.append(clean_num)
         
         _LOGGER.debug(f"Figyelt betétek: {self.my_numbers}")
@@ -110,11 +117,11 @@ class OTPCoordinator(DataUpdateCoordinator):
                 seen.add(url)
                 unique_urls.append(url)
         
-        # Fallback: generate URLs for recent months (may not be linked yet)
+        # Fallback: generate URLs for historical months (2 years = 24 months)
         from datetime import datetime, timedelta
         base_url = "https://www.otpbank.hu/static/portal/sw/file/GK_{}.pdf"
         today = datetime.now()
-        for months_ago in range(3):  # Check last 3 months
+        for months_ago in range(24):  # Check last 24 months (2 years)
             check_date = today - timedelta(days=months_ago * 30)
             # Try 15th of month
             date_str = check_date.strftime("%Y%m") + "15"
@@ -199,6 +206,8 @@ class OTPCoordinator(DataUpdateCoordinator):
             if not date_match: continue
             
             date_key = date_match.group(1)
+            if "_extra" in url:
+                date_key += "_extra"
             
             # Ha már megvan és van benne adat, kihagyjuk
             if date_key in self._all_winners and self._all_winners[date_key].get("numbers"):
@@ -214,7 +223,7 @@ class OTPCoordinator(DataUpdateCoordinator):
                     line = line.strip()
                     if not line: continue
                     # Keresés: szám (5 vagy 6 kezdettel, 9 számjegy)
-                    match = re.search(r'\b([56]\d)\s?(\d{7})\b', line)
+                    match = re.search(r'\b(\d{2})\s?(\d{7})\b', line)
                     if match:
                         full_num = f"{match.group(1)}{match.group(2)}"
                         car_part = line[match.end():].strip()
@@ -297,7 +306,7 @@ class OTPCoordinator(DataUpdateCoordinator):
                     if ld_match: last_draw = ld_match.group(1)
 
                     # Parse current drawing winners from HTML (latest drawing shows on page, not PDF)
-                    html_winners = re.findall(r'\b([56]\d)\s?(\d{7})\b', html_content)
+                    html_winners = re.findall(r'\b(\d{2})\s?(\d{7})\b', html_content)
                     if html_winners and last_draw != "Ismeretlen":
                         # Extract date key from last_draw (e.g. "2026. január 15." -> "20260115")
                         date_match = re.search(r'(\d{4})\.\s*(\w+)\s*(\d+)', last_draw)
@@ -316,7 +325,7 @@ class OTPCoordinator(DataUpdateCoordinator):
                                 seen_nums = set()
                                 for match in html_winners:
                                     num = f"{match[0]}{match[1]}"
-                                    if num not in seen_nums and num.startswith(('5', '6')):
+                                    if num not in seen_nums and len(num) == 9:
                                         seen_nums.add(num)
                                         current_winners.append({"szam": num})
                                 if current_winners:
@@ -336,6 +345,10 @@ class OTPCoordinator(DataUpdateCoordinator):
             # Adatok összeállítása
             self._history.sort(key=lambda x: x.get("datum", ""), reverse=True)
             
+            # Ha a legutóbbi sorsolás dátuma ismeretlen, de van adatunk, vegyük a legfrissebbet
+            if last_draw == "Ismeretlen" and self._history:
+                last_draw = self._history[0].get("datum", "Ismeretlen")
+
             return {
                 "nyeremenyek": len(self._history),
                 "nyertes_reszletek": self._history,
