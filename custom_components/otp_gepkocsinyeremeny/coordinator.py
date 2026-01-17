@@ -249,7 +249,7 @@ class OTPCoordinator(DataUpdateCoordinator):
         for date_key, data in self._all_winners.items():
             for winner in data.get("numbers", []):
                 if winner["szam"] in self.my_numbers:
-                    # Találat!
+                    # Találat - ellenőrizzük, hogy már nincs-e benne (szám + dátum alapján, mert lehet többször nyerni)
                     exists = any(h["szam"] == winner["szam"] and h["datum"] == data["text"] for h in self._history)
                     if not exists:
                         _LOGGER.warning(f"NYEREMÉNY TALÁLAT! {winner['szam']} - {data['text']}")
@@ -298,26 +298,37 @@ class OTPCoordinator(DataUpdateCoordinator):
 
                     # Parse current drawing winners from HTML (latest drawing shows on page, not PDF)
                     html_winners = re.findall(r'\b([56]\d)\s?(\d{7})\b', html_content)
-                    if html_winners:
-                        today_key = datetime.now().strftime("%Y%m%d")
-                        if today_key not in self._all_winners or not self._all_winners[today_key].get("numbers"):
-                            current_winners = []
-                            seen_nums = set()
-                            for match in html_winners:
-                                num = f"{match[0]}{match[1]}"
-                                if num not in seen_nums and num.startswith(('5', '6')):
-                                    seen_nums.add(num)
-                                    current_winners.append({"szam": num})
-                            if current_winners:
-                                self._all_winners[today_key] = {
-                                    "text": last_draw if last_draw != "Ismeretlen" else datetime.now().strftime("%Y. %B %d."),
-                                    "url": "HTML",
-                                    "scan_date": datetime.now().isoformat(),
-                                    "numbers": current_winners
-                                }
-                                _LOGGER.info(f"HTML-ből kinyerve {len(current_winners)} nyertes szám")
-                                await self._async_save_files()
-                                self._check_numbers_against_cache()
+                    if html_winners and last_draw != "Ismeretlen":
+                        # Extract date key from last_draw (e.g. "2026. január 15." -> "20260115")
+                        date_match = re.search(r'(\d{4})\.\s*(\w+)\s*(\d+)', last_draw)
+                        if date_match:
+                            year = date_match.group(1)
+                            month_name = date_match.group(2).lower()
+                            day = date_match.group(3).zfill(2)
+                            months = {"január": "01", "február": "02", "március": "03", "április": "04",
+                                      "május": "05", "június": "06", "július": "07", "augusztus": "08",
+                                      "szeptember": "09", "október": "10", "november": "11", "december": "12"}
+                            month = months.get(month_name, "01")
+                            draw_key = f"{year}{month}{day}"
+                            
+                            if draw_key not in self._all_winners or not self._all_winners[draw_key].get("numbers"):
+                                current_winners = []
+                                seen_nums = set()
+                                for match in html_winners:
+                                    num = f"{match[0]}{match[1]}"
+                                    if num not in seen_nums and num.startswith(('5', '6')):
+                                        seen_nums.add(num)
+                                        current_winners.append({"szam": num})
+                                if current_winners:
+                                    self._all_winners[draw_key] = {
+                                        "text": last_draw,
+                                        "url": "HTML",
+                                        "scan_date": datetime.now().isoformat(),
+                                        "numbers": current_winners
+                                    }
+                                    _LOGGER.info(f"HTML-ből kinyerve {len(current_winners)} nyertes szám ({last_draw})")
+                                    await self._async_save_files()
+                                    self._check_numbers_against_cache()
 
                     # Történelmi PDF-ek szkennelése
                     await self._scan_historical_pdfs(session, html_content)
