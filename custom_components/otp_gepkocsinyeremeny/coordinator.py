@@ -109,6 +109,26 @@ class OTPCoordinator(DataUpdateCoordinator):
             if url not in seen:
                 seen.add(url)
                 unique_urls.append(url)
+        
+        # Fallback: generate URLs for recent months (may not be linked yet)
+        from datetime import datetime, timedelta
+        base_url = "https://www.otpbank.hu/static/portal/sw/file/GK_{}.pdf"
+        today = datetime.now()
+        for months_ago in range(3):  # Check last 3 months
+            check_date = today - timedelta(days=months_ago * 30)
+            # Try 15th of month
+            date_str = check_date.strftime("%Y%m") + "15"
+            fallback_url = base_url.format(date_str)
+            if fallback_url not in seen:
+                seen.add(fallback_url)
+                unique_urls.append(fallback_url)
+            # Try 17th of month (sometimes used)
+            date_str17 = check_date.strftime("%Y%m") + "17"
+            fallback_url17 = base_url.format(date_str17)
+            if fallback_url17 not in seen:
+                seen.add(fallback_url17)
+                unique_urls.append(fallback_url17)
+        
         return unique_urls
 
     def _parse_date_from_pdf_url(self, url):
@@ -275,6 +295,29 @@ class OTPCoordinator(DataUpdateCoordinator):
                     
                     ld_match = re.search(r'Legutóbbi sorsolás:.*?(\d{4}\.\s*\w+\s*\d+\.)', html_content)
                     if ld_match: last_draw = ld_match.group(1)
+
+                    # Parse current drawing winners from HTML (latest drawing shows on page, not PDF)
+                    html_winners = re.findall(r'\b([56]\d)\s?(\d{7})\b', html_content)
+                    if html_winners:
+                        today_key = datetime.now().strftime("%Y%m%d")
+                        if today_key not in self._all_winners or not self._all_winners[today_key].get("numbers"):
+                            current_winners = []
+                            seen_nums = set()
+                            for match in html_winners:
+                                num = f"{match[0]}{match[1]}"
+                                if num not in seen_nums and num.startswith(('5', '6')):
+                                    seen_nums.add(num)
+                                    current_winners.append({"szam": num})
+                            if current_winners:
+                                self._all_winners[today_key] = {
+                                    "text": last_draw if last_draw != "Ismeretlen" else datetime.now().strftime("%Y. %B %d."),
+                                    "url": "HTML",
+                                    "scan_date": datetime.now().isoformat(),
+                                    "numbers": current_winners
+                                }
+                                _LOGGER.info(f"HTML-ből kinyerve {len(current_winners)} nyertes szám")
+                                await self._async_save_files()
+                                self._check_numbers_against_cache()
 
                     # Történelmi PDF-ek szkennelése
                     await self._scan_historical_pdfs(session, html_content)

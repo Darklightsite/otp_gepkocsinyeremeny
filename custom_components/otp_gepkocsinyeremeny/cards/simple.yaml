@@ -11,18 +11,13 @@ primary: >-
 secondary: >-
   {% set count = states('sensor.otp_betetek')|int(0) %}
   {% if count > 0 %}
-    {% for item in state_attr('sensor.otp_betetek', 'nyertes_reszletek')|default([])[:2] %}
-    {{ item.szam }}{% if not loop.last %}, {% endif %}
-    {% endfor %}
+    {% set items = state_attr('sensor.otp_betetek', 'nyertes_reszletek') %}
+    {% if items %}{{ items[0].szam }}{% if items|length > 1 %}, {{ items[1].szam }}{% endif %}{% endif %}
   {% else %}
-    {{ state_attr('sensor.otp_betetek', 'figyelt_db')|default(0) }} betét • Köv: {{ state_attr('sensor.otp_betetek', 'kovetkezo_sorsolas')|default('?') }}
+    {{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} betét
   {% endif %}
 icon: >-
-  {% if states('sensor.otp_betetek')|int(0) > 0 %}
-    mdi:trophy
-  {% else %}
-    mdi:car-convertible
-  {% endif %}
+  {% if states('sensor.otp_betetek')|int(0) > 0 %}mdi:trophy{% else %}mdi:car-convertible{% endif %}
 icon_color: >-
   {% if states('sensor.otp_betetek')|int(0) > 0 %}amber{% else %}blue{% endif %}
 layout: horizontal
@@ -34,16 +29,3 @@ hold_action:
   service: button.press
   target:
     entity_id: button.otp_betetek_adatbazis_frissitese
-card_mod:
-  style: |
-    ha-card {
-      background: {% if states('sensor.otp_betetek')|int(0) > 0 %}
-        linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 152, 0, 0.1) 100%)
-      {% else %}
-        var(--card-background-color)
-      {% endif %};
-      border-radius: 12px;
-      {% if states('sensor.otp_betetek')|int(0) > 0 %}
-      border: 1px solid rgba(255, 193, 7, 0.4);
-      {% endif %}
-    }
