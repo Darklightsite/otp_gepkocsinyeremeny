@@ -40,29 +40,46 @@ class OTPCoordinator(DataUpdateCoordinator):
                 if not part:
                     continue
                 
-                # Check for range (e.g. "600123450-600123460")
-                if "-" in part:
-                    range_parts = part.split("-")
-                    if len(range_parts) == 2:
-                        # Clean both parts to see if they are valid numbers
-                        start_str = re.sub(r"[^0-9]", "", range_parts[0])
-                        end_str = re.sub(r"[^0-9]", "", range_parts[1])
-                        
-                        # Only treat as range if both look like full numbers (>=8 digits)
-                        # and are similar length, to avoid splitting "14-8008533" which is one number
-                        if (len(start_str) >= 8 and len(end_str) >= 8 and 
-                            len(start_str) == len(end_str)):
-                            try:
-                                start_num = int(start_str)
-                                end_num = int(end_str)
-                                if end_num > start_num and (end_num - start_num) < 1000: # Max 1000 range limit
-                                    for i in range(start_num, end_num + 1):
-                                        self.my_numbers.append(str(i))
-                                    continue # Range processed
-                            except ValueError:
-                                pass # Fallback to single number cleaning
+                # Check for range
+                # Try to split by " - " (space dash space) first, as it's the most likely separator for formatted numbers
+                range_parts = []
+                if " - " in part:
+                     range_parts = part.split(" - ")
+                elif "-" in part:
+                    # If only single dash, it's definitely a range separator or a single number with dash
+                    # If multiple dashes (e.g. 14-123-14-129 without spaces), it's ambiguous, but let's try splitting by middle if even?
+                    # Safer: if count is odd, middle one is separator? No.
+                    # Fallback: check split count
+                    splits = part.split("-")
+                    if len(splits) == 2:
+                        range_parts = splits
+                    # If > 2, lets try to see if it's 2 numbers with dashes?
+                    # e.g. "14-123-14-129" -> 4 parts.
+                    # We can't safely guess without spaces. 
+                    # But the "28 vs 20" issue suggests users might use dashes. All we can do is try " - " first.
 
-                # Normal processing (single number)
+                if len(range_parts) == 2:
+                    # Clean both parts
+                    start_str = re.sub(r"[^0-9]", "", range_parts[0])
+                    end_str = re.sub(r"[^0-9]", "", range_parts[1])
+                    
+                    # Range validation:
+                    # 1. Both must be at least 8 digits (valid account numbers)
+                    # 2. Lengths should match (to prevent 14-12345678 where first part is prefix)
+                    if (len(start_str) >= 8 and len(end_str) >= 8 and 
+                        len(start_str) == len(end_str)):
+                        try:
+                            start_num = int(start_str)
+                            end_num = int(end_str)
+                            # Max 1000 range limit
+                            if end_num > start_num and (end_num - start_num) < 1000: 
+                                for i in range(start_num, end_num + 1):
+                                    self.my_numbers.append(str(i))
+                                continue # Range processed
+                        except ValueError:
+                            pass 
+
+                # Normal processing (single number or failed range)
                 # Összerakjuk a szóközöket (pl. "14 8008533" -> "148008533")
                 clean_num = re.sub(r"\s+", "", part)
                 # Csak számjegyeket tartunk meg
