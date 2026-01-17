@@ -1,31 +1,167 @@
-# 🚗 OTP Gépkocsinyeremény - Egyszerű Kártya
+# 🛋️ OTP Gépkocsinyeremény - Komfort Kártya
 # ⚠️ Cseréld le az entitás neveket ha más nevet adtál az integrációnak!
 
-type: custom:mushroom-template-card
-primary: >-
-  {% if states('sensor.otp_betetek')|int(0) > 0 %}
-    🏆 {{ states('sensor.otp_betetek') }} db nyeremény!
-  {% else %}
-    🚗 OTP Gépkocsinyeremény
-  {% endif %}
-secondary: >-
-  {% set count = states('sensor.otp_betetek')|int(0) %}
-  {% if count > 0 %}
-    {% set items = state_attr('sensor.otp_betetek', 'nyertes_reszletek') %}
-    {% if items %}{{ items[0].szam }}{% if items|length > 1 %}, {{ items[1].szam }}{% endif %}{% endif %}
-  {% else %}
-    {{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} betét
-  {% endif %}
-icon: >-
-  {% if states('sensor.otp_betetek')|int(0) > 0 %}mdi:trophy{% else %}mdi:car-convertible{% endif %}
-icon_color: >-
-  {% if states('sensor.otp_betetek')|int(0) > 0 %}amber{% else %}blue{% endif %}
-layout: horizontal
-tap_action:
-  action: more-info
-  entity: sensor.otp_betetek
-hold_action:
-  action: call-service
-  service: button.press
-  target:
-    entity_id: button.otp_betetek_adatbazis_frissitese
+type: custom:stack-in-card
+mode: vertical
+keep:
+  background: false
+  box_shadow: false
+  margin: false
+  outer_padding: false
+  border_radius: false
+card_mod:
+  style: |
+    ha-card {
+      border: 1px solid var(--divider-color) !important;
+      border-radius: 12px !important;
+      padding: 16px !important;
+      background: var(--card-background-color);
+    }
+cards:
+  # Header - Letisztult
+  - type: custom:mushroom-template-card
+    primary: "OTP Gépkocsinyeremény"
+    secondary: >-
+      {% set count = states('sensor.otp_betetek')|int(0) %}
+      {% if count > 0 %}
+        {{ count }} db nyereményed van!
+      {% else %}
+        {{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} betétet figyelünk
+      {% endif %}
+    icon: mdi:bank
+    icon_color: green
+    layout: horizontal
+    tap_action:
+      action: more-info
+      entity: sensor.otp_betetek
+    card_mod:
+      style: |
+        ha-card {
+          margin-bottom: 12px !important;
+        }
+
+  # Chips - Egyszerű, szürke ikonok
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: template
+        icon: mdi:ticket-outline
+        content: "{{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} db"
+      - type: template
+        icon: mdi:calendar-check
+        content: "Utolsó: {{ state_attr('sensor.otp_betetek', 'utolso_sorsolas') | default('?') }}"
+      - type: template
+        icon: mdi:calendar-arrow-right
+        content: "Következő: {{ state_attr('sensor.otp_betetek', 'kovetkezo_sorsolas') | default('?') }}"
+    alignment: start
+    card_mod:
+      style: |
+        ha-card {
+          --chip-background: var(--secondary-background-color);
+          --chip-spacing: 8px;
+        }
+
+  # Winner Section - Kiemelt de nem villogó
+  - type: conditional
+    conditions:
+      - entity: sensor.otp_betetek
+        state_not: "0"
+    card:
+      type: markdown
+      content: >-
+        ### 🏆 Gratulálunk, nyertél!
+        
+        {% set items = state_attr('sensor.otp_betetek', 'nyertes_reszletek') %}
+        {% if items %}
+          {% for item in items %}
+          **{{ item.szam }}**
+          _{{ item.auto }}_
+          {% endfor %}
+        {% endif %}
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(var(--rgb-success-color), 0.1) !important;
+            border-left: 4px solid var(--success-color) !important;
+            border-radius: 4px !important;
+            padding: 12px !important;
+            margin-top: 16px !important;
+            margin-bottom: 16px !important;
+            box-shadow: none !important;
+          }
+          ha-markdown {
+            padding: 0 !important;
+          }
+          h3 {
+            margin-top: 0;
+            color: var(--success-color);
+          }
+
+  # History Section - Egyszerű lista
+  - type: markdown
+    content: >-
+      **Korábbi nyeremények:**
+      
+  # History Section - Egyszerű lista
+  - type: markdown
+    content: >-
+      **Korábbi nyeremények:**<br><br>
+      {%- set history = state_attr('sensor.otp_betetek', 'nyeremeny_tortenelem') -%}
+      {%- set last_draw = state_attr('sensor.otp_betetek', 'utolso_sorsolas') -%}
+      {%- if history -%}
+        {%- set ns = namespace(last_date=None, printed_any=false) -%}
+        {%- for item in history -%}
+          {%- if item.datum != last_draw -%}
+            {%- set ns.printed_any = true -%}
+            {%- if ns.last_date != item.datum -%}
+              {%- if ns.last_date is not none -%}<br>{%- endif -%}
+              **{{ item.datum }}**: 
+              {%- set ns.last_date = item.datum -%}
+            {%- else -%}
+              , 
+            {%- endif -%}
+            {{ item.szam }}{%- if item.auto -%} (_{{ item.auto }}_){%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if not ns.printed_any -%}
+          Nincs megjeleníthető adat.
+        {%- endif -%}
+      {%- else -%}
+        Nincs korábbi nyeremény.
+      {%- endif -%}
+    card_mod:
+      style: |
+        ha-card {
+          border: none !important;
+          box-shadow: none !important;
+          background: none !important;
+          padding: 0px !important;
+          margin-top: 8px !important;
+          font-size: 14px;
+        }
+        p {
+          margin: 0 !important;
+          line-height: 1.6;
+        }
+
+  # Footer - Update Status
+  - type: custom:mushroom-template-card
+    primary: "Frissítve: {{ state_attr('sensor.otp_betetek', 'adatbazis_frissitve') | default('Ismeretlen') }}"
+    secondary: "Állapot: {{ state_attr('sensor.otp_betetek', 'frissites_allapota') | default('Ismeretlen') }}"
+    icon: mdi:database-refresh
+    icon_color: grey
+    layout: horizontal
+    tap_action:
+      action: none
+    card_mod:
+      style: |
+        ha-card {
+          margin-top: 5px !important;
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        :host {
+          --primary-text-color: #888;
+          --secondary-text-color: #666;
+          --icon-size: 20px;
+        }

@@ -183,7 +183,9 @@ class OTPCoordinator(DataUpdateCoordinator):
                 
             return history, checked, all_winners
 
+        _LOGGER.info("Adatok betöltése fájlokból...")
         self._history, self._checked_pdfs, self._all_winners = await self.hass.async_add_executor_job(load)
+        _LOGGER.info(f"Adatok betöltve: {len(self._history)} korábbi találat, {len(self._all_winners)} sorsolás a gyorsítótárban.")
 
     async def _async_save_files(self):
         """Fájlok mentése."""
@@ -192,7 +194,9 @@ class OTPCoordinator(DataUpdateCoordinator):
             with open(self._state_file, 'w') as f: json.dump({"checked_pdfs": self._checked_pdfs}, f)
             with open(self._all_winners_file, 'w') as f: json.dump(self._all_winners, f, indent=2)
 
+        _LOGGER.info("Adatok mentése fájlba...")
         await self.hass.async_add_executor_job(save)
+        _LOGGER.info("Adatok sikeresen elmentve.")
 
     async def _scan_historical_pdfs(self, session, html_content):
         """Végignézi az összes elérhető PDF-et és elmenti a nyerteseket."""
@@ -283,6 +287,8 @@ class OTPCoordinator(DataUpdateCoordinator):
     
     async def _async_update_data(self):
         """Adatok frissítése."""
+        _LOGGER.info("OTP Gépkocsinyeremény adatfrissítés indítása...")
+        
         if not self._all_winners:
             await self._async_load_files()
         
@@ -346,17 +352,40 @@ class OTPCoordinator(DataUpdateCoordinator):
             self._history.sort(key=lambda x: x.get("datum", ""), reverse=True)
             
             # Ha a legutóbbi sorsolás dátuma ismeretlen, de van adatunk, vegyük a legfrissebbet
+            # Ha a legutóbbi sorsolás dátuma ismeretlen, de van adatunk, vegyük a legfrissebbet
             if last_draw == "Ismeretlen" and self._history:
                 last_draw = self._history[0].get("datum", "Ismeretlen")
 
+            # Csak a legutóbbi sorsolás nyereményei
+            latest_winners = []
+            if last_draw != "Ismeretlen":
+                latest_winners = [w for w in self._history if w.get("datum") == last_draw]
+
+            # Következő sorsolás (következő hónap 15-e)
+            today = datetime.now()
+            next_month = today.replace(day=15) + timedelta(days=32)
+            next_draw_date = next_month.replace(day=15)
+            # Ha ma 15-e előtt vagyunk, akkor ehavi 15-e (kivéve ha ma van a sorsolás)
+            if today.day < 15:
+                next_draw_date = today.replace(day=15)
+            
+            months_hu = ["", "január", "február", "március", "április", "május", "június", 
+                        "július", "augusztus", "szeptember", "október", "november", "december"]
+            next_draw = f"{next_draw_date.year}. {months_hu[next_draw_date.month]} {next_draw_date.day}."
+
             return {
                 "nyeremenyek": len(self._history),
-                "nyertes_reszletek": self._history,
+                "nyertes_reszletek": latest_winners,  # Csak a legutóbbiak
                 "utolso_sorsolas": last_draw,
                 "kovetkezo_sorsolas": next_draw,
-                "nyeremeny_tortenelem": self._history,
-                "figyelt_db": len(self.my_numbers)
+                "nyeremeny_tortenelem": self._history, # Teljes történelem
+                "figyelt_db": len(self.my_numbers),
+                "adatbazis_frissitve": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "frissites_allapota": "Sikeres"
             }
+            
+            _LOGGER.info("OTP adatfrissítés sikeresen befejeződött.")
+            return self.data
 
         except Exception as err:
             _LOGGER.error(f"Hiba az OTP adatok lekérésekor: {err}")
@@ -366,5 +395,7 @@ class OTPCoordinator(DataUpdateCoordinator):
                 "utolso_sorsolas": "Hiba a lekérdezésben",
                 "kovetkezo_sorsolas": "Ismeretlen",
                 "nyeremeny_tortenelem": self._history,
-                "figyelt_db": len(self.my_numbers)
+                "figyelt_db": len(self.my_numbers),
+                "adatbazis_frissitve": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "frissites_allapota": f"Hiba: {str(err)}"
             }

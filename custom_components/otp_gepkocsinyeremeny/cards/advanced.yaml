@@ -1,8 +1,23 @@
 # 🚗 OTP Gépkocsinyeremény - Premium Kártya
 # ⚠️ Cseréld le az entitás neveket ha más nevet adtál az integrációnak!
 
-type: vertical-stack
+type: custom:stack-in-card
+mode: vertical
+keep:
+  background: false
+  box_shadow: false
+  margin: false
+  outer_padding: false
+  border_radius: false
+card_mod:
+  style: |
+    ha-card {
+      border: 1px solid var(--divider-color) !important;
+      border-radius: 12px !important;
+      padding: 10px !important;
+    }
 cards:
+  # Header
   - type: custom:mushroom-template-card
     primary: "🚗 OTP Gépkocsinyeremény"
     secondary: >-
@@ -21,6 +36,7 @@ cards:
       action: more-info
       entity: sensor.otp_betetek
 
+  # Chips (Stats)
   - type: custom:mushroom-chips-card
     chips:
       - type: template
@@ -43,6 +59,7 @@ cards:
         content_info: none
     alignment: center
 
+  # Winner Section (Only visible if won)
   - type: conditional
     conditions:
       - entity: sensor.otp_betetek
@@ -61,3 +78,81 @@ cards:
       icon_color: amber
       layout: vertical
       multiline_secondary: true
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(255, 193, 7, 0.1) !important;
+            border: 1px solid rgba(255, 193, 7, 0.3) !important;
+            margin-top: 10px !important;
+            margin-bottom: 10px !important;
+          }
+
+  # History Section
+  # History Section
+  - type: markdown
+    content: >-
+      <ha-icon icon="mdi:history" style="color: purple; margin-right: 8px;"></ha-icon><span style="font-weight: 500; font-size: 16px;">Korábbi nyeremények</span><br><br>
+      {%- set history = state_attr('sensor.otp_betetek', 'nyeremeny_tortenelem') -%}
+      {%- set last_draw = state_attr('sensor.otp_betetek', 'utolso_sorsolas') -%}
+      {%- if history -%}
+        {%- set ns = namespace(last_date=None, printed_any=false) -%}
+        {%- for item in history -%}
+          {%- if item.datum != last_draw -%}
+            {%- set ns.printed_any = true -%}
+            {%- if ns.last_date != item.datum -%}
+              {%- if ns.last_date is not none -%}<br>{%- endif -%}
+              **{{ item.datum }}**: 
+              {%- set ns.last_date = item.datum -%}
+            {%- else -%}
+              , 
+            {%- endif -%}
+            {{ item.szam }} {%- if item.auto -%} (_{{ item.auto }}_){%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if not ns.printed_any -%}
+          Nincs korábbi nyeremény
+        {%- endif -%}
+      {%- else -%}
+        Nincs korábbi nyeremény
+      {%- endif -%}
+    card_mod:
+      style: |
+        ha-card {
+          border: none !important;
+          box-shadow: none !important;
+          background: none !important;
+          padding: 16px !important;
+          padding-top: 0px !important;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        ha-markdown {
+          padding: 0 !important;
+        }
+        p {
+          margin: 0 !important;
+          line-height: 1.6;
+        }
+
+  # Footer - Update Status
+  - type: custom:mushroom-template-card
+    primary: "Frissítve: {{ state_attr('sensor.otp_betetek', 'adatbazis_frissitve') | default('Ismeretlen') }}"
+    secondary: "Állapot: {{ state_attr('sensor.otp_betetek', 'frissites_allapota') | default('Ismeretlen') }}"
+    icon: mdi:database-refresh
+    icon_color: grey
+    layout: horizontal
+    tap_action:
+      action: none
+    card_mod:
+      style: |
+        ha-card {
+          margin-top: 5px !important;
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        :host {
+          --primary-text-color: #888;
+          --secondary-text-color: #666;
+          --icon-size: 24px;
+        }

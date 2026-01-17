@@ -1,24 +1,207 @@
-# 🚗 OTP Gépkocsinyeremény - Kompakt Chip Kártya
+# 💎 OTP Gépkocsinyeremény - Prémium Kártya
 # ⚠️ Cseréld le az entitás neveket ha más nevet adtál az integrációnak!
 
-type: custom:mushroom-chips-card
-chips:
-  - type: template
-    icon: >-
-      {% if states('sensor.otp_betetek')|int(0) > 0 %}mdi:trophy{% else %}mdi:car-convertible{% endif %}
-    icon_color: >-
-      {% if states('sensor.otp_betetek')|int(0) > 0 %}amber{% else %}blue{% endif %}
-    content: >-
+type: custom:stack-in-card
+mode: vertical
+keep:
+  background: true
+  box_shadow: false
+  margin: false
+  outer_padding: false
+  border_radius: false
+card_mod:
+  style: |
+    ha-card {
+      background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px !important;
+      padding: 0px !important;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+      --primary-text-color: #ffffff;
+      --secondary-text-color: #a0a0a0;
+    }
+cards:
+  # Header - Gradiens háttérrel
+  - type: custom:mushroom-template-card
+    primary: "OTP Gépkocsinyeremény"
+    secondary: >-
       {% set count = states('sensor.otp_betetek')|int(0) %}
-      {% if count > 0 %}🎉 {{ count }} nyeremény!{% else %}OTP ({{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }}){% endif %}
+      {% if count > 0 %}
+        🎉 {{ count }} db NYEREMÉNY!
+      {% else %}
+        💎 {{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} betét figyelve
+      {% endif %}
+    icon: >-
+      {% if states('sensor.otp_betetek')|int(0) > 0 %}mdi:trophy-variant{% else %}mdi:car-sports{% endif %}
+    icon_color: white
+    layout: vertical
     tap_action:
       action: more-info
       entity: sensor.otp_betetek
-  - type: entity
-    entity: button.otp_betetek_adatbazis_frissitese
-    icon: mdi:refresh
-    icon_color: cyan
+    card_mod:
+      style: |
+        ha-card {
+          background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+          height: 120px !important;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          margin-bottom: -20px !important;
+          z-index: 1;
+        }
+        :host {
+          --primary-text-color: #000000 !important;
+          --secondary-text-color: #222222 !important;
+          --icon-size: 48px;
+        }
+
+  # Chips - Lebegő stílus
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: template
+        icon: mdi:ticket-confirmation
+        content: "{{ state_attr('sensor.otp_betetek', 'figyelt_db') | default(0) }} db"
+        icon_color: cyan
+      - type: template
+        icon: mdi:calendar-check
+        content: "{{ state_attr('sensor.otp_betetek', 'utolso_sorsolas') | default('?') }}"
+        icon_color: green
+      - type: template
+        icon: mdi:calendar-clock
+        content: "{{ state_attr('sensor.otp_betetek', 'kovetkezo_sorsolas') | default('?') }}"
+        icon_color: orange
+      - type: entity
+        entity: button.otp_betetek_adatbazis_frissitese
+        icon_color: blue
+        tap_action:
+          action: toggle
+        content_info: none
+    alignment: center
+    card_mod:
+      style: |
+        ha-card {
+          margin-top: 10px;
+          margin-bottom: 10px;
+          --chip-background: rgba(255,255,255,0.1);
+          --chip-box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          --chip-border-radius: 12px;
+        }
+
+  # Winner Section - Animált
+  - type: conditional
+    conditions:
+      - entity: sensor.otp_betetek
+        state_not: "0"
+    card:
+      type: custom:mushroom-template-card
+      primary: "GRATULÁLUNK!"
+      secondary: >-
+        {% set items = state_attr('sensor.otp_betetek', 'nyertes_reszletek') %}
+        {% if items %}
+          {% for item in items %}
+          {{ item.szam }}
+          {{ item.auto }}
+          {% endfor %}
+        {% endif %}
+      icon: mdi:party-popper
+      icon_color: yellow
+      layout: vertical
+      multiline_secondary: true
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(255, 215, 0, 0.1) !important;
+            border: 1px solid rgba(255, 215, 0, 0.5) !important;
+            margin-bottom: 20px !important;
+            animation: pulse 2s infinite;
+          }
+          ha-state-icon {
+            animation: wobble 2s infinite;
+          }
+          @keyframes wobble {
+            0% { transform: rotate(0deg); }
+            15% { transform: rotate(-10deg) translateX(-2px); }
+            30% { transform: rotate(10deg) translateX(2px); }
+            45% { transform: rotate(-5deg); }
+            60% { transform: rotate(5deg); }
+            75% { transform: rotate(0deg); }
+            100% { transform: rotate(0deg); }
+          }
+          @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+          }
+
+  # History Section - Glassmorphism és ikonok
+  - type: markdown
+    content: >-
+      <div style="display: flex; align-items: center; margin-bottom: 15px; margin-top: 5px; padding-left: 10px;">
+        <div style="background: rgba(138, 43, 226, 0.2); border-radius: 50%; padding: 8px; margin-right: 12px;">
+          <ha-icon icon="mdi:history" style="color: #bf80ff;"></ha-icon>
+        </div>
+        <span style="font-weight: 600; font-size: 18px; color: white;">Korábbi nyeremények</span>
+      </div>
+
+      {%- set history = state_attr('sensor.otp_betetek', 'nyeremeny_tortenelem') -%}
+      {%- set last_draw = state_attr('sensor.otp_betetek', 'utolso_sorsolas') -%}
+      {%- if history -%}
+        <div style="padding: 0 10px;">
+        {%- set ns = namespace(last_date=None, printed_any=false) -%}
+        {%- for item in history -%}
+          {%- if item.datum != last_draw -%}
+            {%- set ns.printed_any = true -%}
+            {%- if ns.last_date != item.datum -%}
+              {%- if ns.last_date is not none -%}</div>{%- endif -%}
+              <div style="margin-bottom: 12px; border-left: 2px solid #bf80ff; padding-left: 12px;">
+              <div style="font-weight: bold; color: #bf80ff; font-size: 14px; margin-bottom: 4px;">{{ item.datum }}</div>
+              {%- set ns.last_date = item.datum -%}
+            {%- endif -%}
+            <div style="font-size: 15px; color: #eee; margin-bottom: 2px;">{{ item.szam }}</div>
+            {%- if item.auto -%}
+            <div style="font-size: 13px; color: #aaa; font-style: italic;">{{ item.auto }}</div>
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if ns.printed_any -%}</div>{%- endif -%}
+        {%- if not ns.printed_any -%}
+          <div style="text-align: center; color: #888; padding: 20px;">Nincs korábbi nyeremény</div>
+        {%- endif -%}
+        </div>
+      {%- else -%}
+        <div style="text-align: center; color: #888; padding: 20px;">Nincs korábbi nyeremény</div>
+      {%- endif -%}
+    card_mod:
+      style: |
+        ha-card {
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 10px !important;
+          max-height: 400px;
+          overflow-y: auto;
+        }
+        ha-markdown { padding: 0 !important; }
+
+  # Footer - Update Status
+  - type: custom:mushroom-template-card
+    primary: "Frissítve: {{ state_attr('sensor.otp_betetek', 'adatbazis_frissitve') | default('Ismeretlen') }}"
+    secondary: "Állapot: {{ state_attr('sensor.otp_betetek', 'frissites_allapota') | default('Ismeretlen') }}"
+    icon: mdi:database-refresh
+    icon_color: grey
+    layout: horizontal
     tap_action:
-      action: toggle
-    content_info: none
-alignment: center
+      action: none
+    card_mod:
+      style: |
+        ha-card {
+          margin-top: 10px !important;
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        :host {
+          --primary-text-color: rgba(255,255,255,0.5);
+          --secondary-text-color: rgba(255,255,255,0.3);
+          --icon-size: 20px;
+        }
