@@ -339,6 +339,14 @@ class OTPCoordinator(DataUpdateCoordinator):
             await self._async_load_files()
         
         # Először nézzük meg a cache-ből (hátha új számot adott hozzá a user)
+        # Törölt számok eltávolítása az előzményekből
+        original_count = len(self._history)
+        self._history = [h for h in self._history if h.get("szam") in self.my_numbers]
+        
+        if len(self._history) != original_count:
+             _LOGGER.info(f"Eltávolítva {original_count - len(self._history)} régi nyeremény a törölt számok miatt.")
+             await self._async_save_files()
+
         self._check_numbers_against_cache()
         
         try:
