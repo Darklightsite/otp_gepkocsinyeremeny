@@ -363,7 +363,30 @@ class OTPCoordinator(DataUpdateCoordinator):
                     if nd_match: next_draw = nd_match.group(1)
                     
                     ld_match = re.search(r'Legutóbbi sorsolás:.*?(\d{4}\.\s*\w+\s*\d+\.)', html_content)
+                    if not ld_match: # Try new format
+                        ld_match = re.search(r'sorsolás\s*-\s*(\d{4}\.\s*\w+\s*\d+\.)', html_content)
+                    
                     if ld_match: last_draw = ld_match.group(1)
+
+                    if last_draw == "Ismeretlen":
+                         # Fallback: Scrape failed, calculate theoretical date
+                         # Logic: If today < 15th, last draw was previous month 15th
+                         # If today >= 15th, last draw was this month 15th
+                         now = datetime.now()
+                         if now.day < 15:
+                             # Previous month
+                             first_of_month = now.replace(day=1)
+                             last_month = first_of_month - timedelta(days=1)
+                             target_date = last_month.replace(day=15)
+                         else:
+                             # This month
+                             target_date = now.replace(day=15)
+                         
+                         months_hu = ["", "január", "február", "március", "április", "május", "június", 
+                                     "július", "augusztus", "szeptember", "október", "november", "december"]
+                         
+                         last_draw = f"{target_date.year}. {months_hu[target_date.month]} {target_date.day}."
+                         _LOGGER.info(f"Sorsolás dátuma nem található, becsült dátum használata: {last_draw}")
 
                     # Parse current drawing winners from HTML (latest drawing shows on page, not PDF)
                     html_winners = re.findall(r'\b(\d{2})\s?(\d{7})\b', html_content)

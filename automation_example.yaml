@@ -1,0 +1,35 @@
+# Példa automatizálás a sorsolás értesítéshez
+# Másold be ezt a kódot az automations.yaml fájlodba
+# vagy hozz létre egy új automatizálást a felületen YAML módban.
+
+alias: "OTP Gépkocsinyeremény - Értesítés sorsolásról"
+description: "Értesítést küld a telefonra, ha ma történt sorsolás."
+trigger:
+  - platform: state
+    entity_id: user_input_entity_id_placeholder # CSERÉLD KI: sensor.otp_betetek
+    attribute: utolso_sorsolas
+condition:
+  - condition: template
+    value_template: >-
+      {% set months = {
+        1: "január", 2: "február", 3: "március", 4: "április",
+        5: "május", 6: "június", 7: "július", 8: "augusztus",
+        9: "szeptember", 10: "október", 11: "november", 12: "december"
+      } %}
+      {% set today_str = now().year ~ ". " ~ months[now().month] ~ " " ~ now().day ~ "." %}
+      {{ state_attr('trigger.entity_id', 'utolso_sorsolas') == today_str }}
+action:
+  - service: notify.mobile_app_saját_telefon # CSERÉLD KI a saját eszközödre
+    data:
+      title: "🚗 OTP Gépkocsinyeremény Sorsolás!"
+      message: >-
+        Ma volt a sorsolás! ({{ state_attr('trigger.entity_id', 'utolso_sorsolas') }})
+        
+        {% set count = states('sensor.otp_betetek')|int(0) %}
+        {% if count > 0 %}
+          🎉 GRATULÁLOK! {{ count }} db nyereményed van!
+        {% else %}
+          Sajnos most nem nyertél.
+        {% endif %}
+      data:
+        url: /lovelace/otp # Vagy ahol a kártyád van
