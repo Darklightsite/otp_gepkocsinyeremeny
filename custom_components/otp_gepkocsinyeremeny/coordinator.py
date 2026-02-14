@@ -7,6 +7,7 @@ import aiohttp
 import async_timeout
 import asyncio
 from datetime import timedelta, datetime
+import holidays
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components import persistent_notification
@@ -356,11 +357,9 @@ class OTPCoordinator(DataUpdateCoordinator):
                         html_content = await response.text()
                     
                     # Aktuális dátumok keresése az oldalon
-                    next_draw = "Ismeretlen"
                     last_draw = "Ismeretlen"
                     
-                    nd_match = re.search(r'Következő sorsolás:.*?(\d{4}\.\s*\w+\s*\d+\.)', html_content)
-                    if nd_match: next_draw = nd_match.group(1)
+                    # A következő sorsolás már nem szerepel a HTML-ben, azt számítással határozzuk meg
                     
                     ld_match = re.search(r'Legutóbbi sorsolás:.*?(\d{4}\.\s*\w+\s*\d+\.)', html_content)
                     if not ld_match: # Try new format
@@ -438,13 +437,27 @@ class OTPCoordinator(DataUpdateCoordinator):
             if last_draw != "Ismeretlen":
                 latest_winners = [w for w in self._history if w.get("datum") == last_draw]
 
-            # Következő sorsolás (következő hónap 15-e)
-            today = datetime.now()
-            next_month = today.replace(day=15) + timedelta(days=32)
-            next_draw_date = next_month.replace(day=15)
-            # Ha ma 15-e előtt vagyunk, akkor ehavi 15-e (kivéve ha ma van a sorsolás)
-            if today.day < 15:
-                next_draw_date = today.replace(day=15)
+            # Következő sorsolás számítása (hónap 15-e, vagy ha hétvége/ünnep, akkor a következő munkanap)
+            def get_next_draw_date():
+                today = datetime.now()
+                # Ha ma 15-e előtt vagyunk, akkor ehavi 15-e
+                if today.day < 15:
+                    candidate = today.replace(day=15)
+                else:
+                    # Ha ma 15-e vagy utána, akkor következő hónap 15-e
+                    next_month = today.replace(day=1) + timedelta(days=32)
+                    candidate = next_month.replace(day=15)
+                
+                # Magyar ünnepnapok
+                hu_holidays = holidays.Hungary(years=[candidate.year])
+                
+                # Ha a kandidáns hétvégére vagy ünnepnapra esik, akkor következő munkanap
+                while candidate.weekday() in (5, 6) or candidate in hu_holidays:
+                    candidate = candidate + timedelta(days=1)
+                
+                return candidate
+            
+            next_draw_date = get_next_draw_date()
             
             months_hu = ["", "január", "február", "március", "április", "május", "június", 
                         "július", "augusztus", "szeptember", "október", "november", "december"]
